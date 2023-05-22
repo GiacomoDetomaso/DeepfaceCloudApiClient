@@ -7,14 +7,17 @@ class JsonRequestDialog extends StatelessWidget {
   // field name and associated icon
   final LinkedHashMap<String, IconData> fields;
 
+  // The title of the dialog
+  final int id;
+
   // The controller to obtain the dialog's input
   final List<TextEditingController> _textEditingControllerList = [];
 
-  // This callback is used to let the parent widget of the Dialog obtain its 
+  // This callback is used to let the parent widget of the Dialog obtain its
   // input List, in order to send the request to the  web server.
   // The List contains the inputs, inserted in the same order as they
   // appear in the JsonRequestDialog.
-  final Function(List<String>) onRequestSendCallback;
+  final Function(List<String>, int) onRequestSendCallback;
 
   void _initControllersList() {
     // Used to add a controller for every TextField
@@ -24,7 +27,7 @@ class JsonRequestDialog extends StatelessWidget {
   }
 
   JsonRequestDialog(
-      {super.key, required this.fields, required this.onRequestSendCallback}) {
+      {super.key, required this.fields, required this.onRequestSendCallback, required this.id}) {
     _initControllersList();
   }
 
@@ -95,7 +98,7 @@ class JsonRequestDialog extends StatelessWidget {
                     child: const Text("Chiudi")),
                 TextButton(
                     onPressed: () {
-                      List inputs = [];
+                      List<String> inputs = [];
                       int controllersLength = _textEditingControllerList.length;
 
                       for (int i = 0; i < controllersLength; i++) {
@@ -103,11 +106,11 @@ class JsonRequestDialog extends StatelessWidget {
 
                         text.isNotEmpty
                             ? inputs.add(text)
-                            : ScaffoldMessenger.of(context)
-                                .showSnackBar(SnackBar(
-                            content: Text(
-                                "Il campo ${fields.values.elementAt(i)} è vuoto")));
+                            : ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content: Text(
+                                    "Il campo ${fields.values.elementAt(i)} è vuoto")));
                       }
+                      onRequestSendCallback(inputs, id);
                     },
                     child: const Text("Invia"))
               ]),
