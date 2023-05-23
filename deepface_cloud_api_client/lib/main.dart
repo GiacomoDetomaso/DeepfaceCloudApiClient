@@ -90,22 +90,31 @@ class _MyHomePageState extends State<MyHomePage> {
   /// This mthod is used to handle the api request to REST api
   Future<void> apiRequest(String url, Map jsonMap) async {
     log("Request started at url: $url");
-    HttpClient httpClient = HttpClient();
-    HttpClientRequest request = await httpClient.postUrl(Uri.parse(url));
-    request.headers.set('content-type', 'application/json');
-    request.add(utf8.encode(json.encode(jsonMap)));
-    HttpClientResponse response = await request.close();
-    // todo - you should check the response.statusCode
-    String reply = await response.transform(utf8.decoder).join();
-    httpClient.close();
-    Map jsonReply = jsonDecode(reply);
-    handleApiResponse(jsonReply, url);
+
+    if (_selectedChip != -1) {
+      HttpClient httpClient = HttpClient();
+      HttpClientRequest request = await httpClient.postUrl(Uri.parse(url));
+      request.headers.set('content-type', 'application/json');
+      request.add(utf8.encode(json.encode(jsonMap)));
+      HttpClientResponse response = await request.close();
+      // todo - you should check the response.statusCode
+      String reply = await response.transform(utf8.decoder).join();
+      httpClient.close();
+      Map jsonReply = jsonDecode(reply);
+      handleApiResponse(jsonReply, url);
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+        backgroundColor: Colors.red,
+        content: Text(
+            'Selezionare il task da eseguire prima di inviare la richiesta'),
+        duration: Duration(seconds: 1, microseconds: 500),
+      ));
+    }
   }
 
   void handleApiResponse(Map reply, String url) {
-    log(reply['founded_ids'][0]);
-
     if (url.contains('detect')) {
+      // TODO: alert dialog before display result
       showDialog(
           context: context,
           builder: (context) {
@@ -113,12 +122,19 @@ class _MyHomePageState extends State<MyHomePage> {
               child: Image.memory(base64.decode(reply['img_b64'])),
             );
           });
+    } else if (url.contains('find')) {
+      // TODO: full screen dialog with the results of the operation
+      // TODO: handle not represented user
+    } else if (url.contains('verify')) {
+      // TODO: show snackbar with the result of the operation
+    } else if (url.contains('represent')) {
+      // TODO: show snackbar with the result of the operation
     }
   }
 
   /// Used to display the request dialog
   void _sendAction() {
-    log("Indice $_selectedChip");
+    log("Chip index $_selectedChip");
     if (_selectedChip == 1 || _selectedChip == 3) {
       _addEntriesOnChipBased();
       showDialog(
@@ -166,7 +182,7 @@ class _MyHomePageState extends State<MyHomePage> {
       // by the user. The Widget is then wrapped by a Center.
       body: Center(
           child: HomeWidget(
-        onChipSelected: (index, name) {
+        onChipSelectedCallback: (index, name) {
           _selectedChip = index;
 
           // Add the nested services if detect is select
@@ -179,14 +195,14 @@ class _MyHomePageState extends State<MyHomePage> {
           // Build the url that will be used to perform the request
           requestURL = widget.url + name.toLowerCase();
 
-          log("Actuale Url: $requestURL");
+          log("Actual Url: $requestURL");
         },
 
         // The callback is used to process the base 64 encoded image
         imagePickedCallback: (b64Image) {
           _imagePicked = true;
-          log("Lunghezza stringa b64: ${b64Image.length}");
-          log("Lunghezza byte b64: ${base64.decode(b64Image).length}");
+          log("String b64 length: ${b64Image.length}");
+          log("Number of bytes b64 decoded image: ${base64.decode(b64Image).length}");
           _buildJsonRequestMap(['img'], [b64Image]);
         },
       )),
@@ -213,6 +229,7 @@ class _MyHomePageState extends State<MyHomePage> {
           onPressed: () {
             !_imagePicked // If the image is not picked show a snackbar
                 ? ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                    backgroundColor: Colors.red,
                     content: Text(
                         'Impossibile inviare una richiesta senza prima aver selezionato un immagine.'),
                     duration: Duration(seconds: 1, microseconds: 500),

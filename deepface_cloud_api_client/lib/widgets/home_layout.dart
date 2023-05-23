@@ -9,22 +9,28 @@ class HomeWidget extends StatefulWidget {
   // The input is the base64 encode of the picked image. If the process
   // is unsuccessful the input is empty.
   final Function(String) imagePickedCallback;
-  final Function(int, String) onChipSelected;
+
+  // This callback is used to identify what action is 
+  // selected from the ChipGroup
+  final Function(int, String) onChipSelectedCallback;
 
   const HomeWidget(
       {super.key,
       required this.imagePickedCallback,
-      required this.onChipSelected});
+      required this.onChipSelectedCallback});
 
   @override
   State<StatefulWidget> createState() => _HomeWidgetState();
 }
 
 class _HomeWidgetState extends State<HomeWidget> {
-  int? _value = 0;
-  Uint8List? _imageBytes;
-  bool imagePicked = false;
+  // Used to select the correct chip
+  int? _value = -1;
 
+  // Used to store the bytes of the read image
+  Uint8List? _imageBytes;
+
+  // The list of the categories of the chip
   final List _choiceChipCategories = [
     "Detect",
     "Represent",
@@ -64,7 +70,7 @@ class _HomeWidgetState extends State<HomeWidget> {
                               _value = selected ? index : null;
 
                               if (_value != null) {
-                                widget.onChipSelected(
+                                widget.onChipSelectedCallback(
                                     _value!, _choiceChipCategories[_value!]);
                               }
                             });
@@ -77,7 +83,7 @@ class _HomeWidgetState extends State<HomeWidget> {
           // The following section is used to display the picked image.
           // It is visible only if the image is picked and automatically
           // disappears when the request is completed
-          if (imagePicked)
+          if (_imageBytes != null)
             Container(
               padding: const EdgeInsets.only(top: 30.0),
               alignment: Alignment.center,
@@ -116,7 +122,6 @@ class _HomeWidgetState extends State<HomeWidget> {
                 widget.imagePickedCallback(encodedBytes);
                 // Change the state of the widget according to the picked image
                 setState(() {
-                  imagePicked = true;
                   _imageBytes = imageBytes;
                 });
               },
