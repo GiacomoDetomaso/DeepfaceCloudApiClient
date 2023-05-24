@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'dart:developer';
 import 'dart:io';
 
+import 'package:deepface_cloud_api_client/utils/api_response_handler.dart';
 import 'package:deepface_cloud_api_client/widgets/dialog_form_generator.dart';
 import 'package:flutter/material.dart';
 import 'widgets/home_layout.dart';
@@ -33,7 +34,7 @@ class MyHomePage extends StatefulWidget {
 
   final Map<String, String> jsonRequest = {};
   final String title;
-  final String url = "https://deepfacecloudapiunibatesi.azurewebsites.net/";
+  final String url = 'https://deepfacecloudapiunibatesi.azurewebsites.net/';
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
@@ -50,6 +51,8 @@ class _MyHomePageState extends State<MyHomePage> {
   // Indicates if the image is picked from the storage
   bool _imagePicked = false;
 
+  bool _requestStatus = false;
+
   // A map used to build the dialog to send the request to the web server
   // through the JsonRequestDialog
   LinkedHashMap<String, IconData> entries = LinkedHashMap();
@@ -61,8 +64,34 @@ class _MyHomePageState extends State<MyHomePage> {
     });
   }
 
+  void updateRequestRunning(bool status) {
+    setState(() {
+      _requestStatus = status;
+    });
+  }
+
+  /// Used to add the correct entries to the map based on the operation choice
+  void _addEntriesOnChipBased() {
+    entries.clear();
+    switch (_selectedChip) {
+      case 1:
+        entries.addAll(
+          {'username': Icons.account_circle, 'info': Icons.info},
+        );
+        break;
+      case 3:
+        entries.addAll({'Username': Icons.account_circle});
+        break;
+    }
+  }
+
   /// Used to build the json request
-  void _buildJsonRequestMap(List<String> keys, List<String> values) {
+  void _buildJsonRequestMap(
+      List<String> keys, List<String> values, bool clean) {
+    if (clean && widget.jsonRequest.isNotEmpty) {
+      widget.jsonRequest.clear();
+    }
+
     if (keys.length != values.length) {
       throw Exception("Keys and values must have the same size");
     }
@@ -72,36 +101,67 @@ class _MyHomePageState extends State<MyHomePage> {
     }
   }
 
-  /// Used to add the correct entries to the map based on the operation choice
-  void _addEntriesOnChipBased() {
-    entries.clear();
-    switch (_selectedChip) {
-      case 1:
-        entries.addAll(
-          {'Username': Icons.account_circle, 'Info': Icons.info},
-        );
-        break;
-      case 3:
-        entries.addAll({'Usermane': Icons.account_circle});
-        break;
+  /// This mthod is used to handle the api request to REST api
+  Future<void> sendApiRequest(String url, Map jsonMap) async {
+    updateRequestRunning(true); // Change the state
+
+    log("Request started at url: $url");
+
+    HttpClient httpClient = HttpClient();
+    HttpClientRequest request = await httpClient.postUrl(Uri.parse(url));
+    request.headers.set('content-type', 'application/json');
+    request.add(utf8.encode(json.encode(jsonMap)));
+    HttpClientResponse response = await request.close();
+    // todo - you should check the response.statusCode
+    String reply = await response.transform(utf8.decoder).join();
+    httpClient.close();
+
+    Map jsonReply = jsonDecode(reply);
+    log(reply);
+
+    if (context.mounted) {
+      updateRequestRunning(false);
+      var responseHanlder = ApiResponseHandler(jsonReply, context);
+      responseHanlder.handleApiResponse(url);
+    } else {
+      log('Context not mounted');
     }
   }
 
-  /// This mthod is used to handle the api request to REST api
-  Future<void> apiRequest(String url, Map jsonMap) async {
-    log("Request started at url: $url");
+  /// Used to display the request dialog
+  void _sendAction() {
+    log("Chip index $_selectedChip");
+    if (requestURL != widget.url) {
+      if (_selectedChip == 1 || _selectedChip == 3) {
+        _addEntriesOnChipBased();
+        showDialog(
+            context: context,
+            builder: (context) => JsonRequestDialog(
+                  fields: entries,
+                  id: _selectedChip,
+                  onRequestSendCallback: (inputFields, id) {
+                    List<String> keys = [];
 
-    if (_selectedChip != -1) {
-      HttpClient httpClient = HttpClient();
-      HttpClientRequest request = await httpClient.postUrl(Uri.parse(url));
-      request.headers.set('content-type', 'application/json');
-      request.add(utf8.encode(json.encode(jsonMap)));
-      HttpClientResponse response = await request.close();
-      // todo - you should check the response.statusCode
-      String reply = await response.transform(utf8.decoder).join();
-      httpClient.close();
-      Map jsonReply = jsonDecode(reply);
-      handleApiResponse(jsonReply, url);
+                    if (id == 1) {
+                      keys = ['username', 'info'];
+                    } else if (id == 3) {
+                      keys = ['identity'];
+                    }
+
+                    _buildJsonRequestMap(keys, inputFields, false);
+                    log(widget.jsonRequest.toString());
+                    sendApiRequest(requestURL, widget.jsonRequest);
+
+                    // Let the user start a new request
+                    _imagePicked = false;
+
+                    // ignore: use_build_context_synchronously
+                    Navigator.pop(context); // Close the Dialog
+                  },
+                ));
+      } else {
+        sendApiRequest(requestURL, widget.jsonRequest);
+      }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
         backgroundColor: Colors.red,
@@ -109,60 +169,6 @@ class _MyHomePageState extends State<MyHomePage> {
             'Selezionare il task da eseguire prima di inviare la richiesta'),
         duration: Duration(seconds: 1, microseconds: 500),
       ));
-    }
-  }
-
-  void handleApiResponse(Map reply, String url) {
-    if (url.contains('detect')) {
-      // TODO: alert dialog before display result
-      showDialog(
-          context: context,
-          builder: (context) {
-            return Dialog(
-              child: Image.memory(base64.decode(reply['img_b64'])),
-            );
-          });
-    } else if (url.contains('find')) {
-      // TODO: full screen dialog with the results of the operation
-      // TODO: handle not represented user
-    } else if (url.contains('verify')) {
-      // TODO: show snackbar with the result of the operation
-    } else if (url.contains('represent')) {
-      // TODO: show snackbar with the result of the operation
-    }
-  }
-
-  /// Used to display the request dialog
-  void _sendAction() {
-    log("Chip index $_selectedChip");
-    if (_selectedChip == 1 || _selectedChip == 3) {
-      _addEntriesOnChipBased();
-      showDialog(
-          context: context,
-          builder: (context) => JsonRequestDialog(
-                fields: entries,
-                id: _selectedChip,
-                onRequestSendCallback: (inputFields, id) async {
-                  List<String> keys = [];
-
-                  if (id == 1) {
-                    keys = ['username', 'info'];
-                  } else if (id == 3) {
-                    keys = ['identity'];
-                  }
-
-                  _buildJsonRequestMap(keys, inputFields);
-                  apiRequest(requestURL, widget.jsonRequest);
-
-                  // Let the user start a new request
-                  _imagePicked = false;
-
-                  // ignore: use_build_context_synchronously
-                  Navigator.pop(context); // Close the Dialog
-                },
-              ));
-    } else {
-      apiRequest(requestURL, widget.jsonRequest);
     }
   }
 
@@ -182,6 +188,7 @@ class _MyHomePageState extends State<MyHomePage> {
       // by the user. The Widget is then wrapped by a Center.
       body: Center(
           child: HomeWidget(
+        isCircularProgressIndicatorShowing: _requestStatus,
         onChipSelectedCallback: (index, name) {
           _selectedChip = index;
 
@@ -203,7 +210,7 @@ class _MyHomePageState extends State<MyHomePage> {
           _imagePicked = true;
           log("String b64 length: ${b64Image.length}");
           log("Number of bytes b64 decoded image: ${base64.decode(b64Image).length}");
-          _buildJsonRequestMap(['img'], [b64Image]);
+          _buildJsonRequestMap(['img'], [b64Image], true);
         },
       )),
 

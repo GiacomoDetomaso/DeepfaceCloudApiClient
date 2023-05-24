@@ -1,7 +1,9 @@
 import 'dart:convert';
+import 'dart:developer';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
 
 class HomeWidget extends StatefulWidget {
@@ -10,12 +12,15 @@ class HomeWidget extends StatefulWidget {
   // is unsuccessful the input is empty.
   final Function(String) imagePickedCallback;
 
-  // This callback is used to identify what action is 
+  // This callback is used to identify what action is
   // selected from the ChipGroup
   final Function(int, String) onChipSelectedCallback;
 
+  final bool isCircularProgressIndicatorShowing;
+
   const HomeWidget(
       {super.key,
+      required this.isCircularProgressIndicatorShowing,
       required this.imagePickedCallback,
       required this.onChipSelectedCallback});
 
@@ -37,6 +42,16 @@ class _HomeWidgetState extends State<HomeWidget> {
     "Identify",
     "Verify"
   ];
+
+  // 4. compress Uint8List and get another Uint8List.
+  Future<Uint8List> compressUint8List(Uint8List list) async {
+    var result = await FlutterImageCompress.compressWithList(list, quality: 15);
+
+    log("Before compressing: ${list.length}");
+    log("After compressing: ${result.length}");
+
+    return result;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -95,7 +110,7 @@ class _HomeWidgetState extends State<HomeWidget> {
                         alignment: Alignment.center,
                         image: MemoryImage(_imageBytes!),
                         fit: BoxFit.fill),
-                    shape: BoxShape.circle),
+                    shape: BoxShape.rectangle),
               ),
             ),
 
@@ -109,15 +124,16 @@ class _HomeWidgetState extends State<HomeWidget> {
                 child: OutlinedButton(
               onPressed: () async {
                 // Retrieve the image from the gallery using the ImagePicker
-                final XFile? imageFile = await ImagePicker()
-                    .pickImage(source: ImageSource.gallery, imageQuality: 25);
+                final XFile? imageFile =
+                    await ImagePicker().pickImage(source: ImageSource.gallery);
 
                 // Retrieve the image bytes from the file
                 Uint8List? imageBytes = await imageFile?.readAsBytes();
-                debugPrint("${imageBytes?.length}");
+
+                Uint8List imageBytesCompressed = await compressUint8List(imageBytes!);
 
                 // Encode image bytes using the dart:convert module's base64Encode
-                String encodedBytes = base64.encode(imageBytes!.toList());
+                String encodedBytes = base64.encode(imageBytesCompressed.toList());
                 // Send the encoded String to the parent via callback
                 widget.imagePickedCallback(encodedBytes);
                 // Change the state of the widget according to the picked image
@@ -128,6 +144,11 @@ class _HomeWidgetState extends State<HomeWidget> {
               child: const Text('Seleziona immagine'),
             )),
           ),
+          Padding(
+              padding: const EdgeInsets.only(top: 30),
+              child: Visibility(
+                  visible: widget.isCircularProgressIndicatorShowing,
+                  child: const Center(child: CircularProgressIndicator()))),
         ]);
   }
 }
