@@ -1,3 +1,5 @@
+import 'dart:math';
+
 import 'package:flutter/material.dart';
 import 'dart:convert';
 
@@ -5,26 +7,33 @@ class ApiResponseHandler {
   Map reply;
   BuildContext context;
 
+  static const String _successStatus = 'success';
+  static const String identifyFail = 'idFail';
+
   ApiResponseHandler(this.reply, this.context);
 
-  void handleApiResponse(String url) {
+  String handleApiResponse(String url) {
+    String message = '';
+
     // Select the correct response handler
     if (url.contains('detect')) {
       _handleDetectRequestResponse();
     } else if (url.contains('find')) {
-      _handleIndentifyRequestResponse();
+      message = _handleIndentifyRequestResponse();
     } else if (url.contains('verify')) {
       _handleVerifyRequestResponse();
     } else if (url.contains('represent')) {
       _handleRepresentRequestResponse();
     }
+
+    return message;
   }
 
   /// This method is used to spcify what action perform, if detect service
   /// is selected, according to the the reply sent from the web API
   void _handleDetectRequestResponse() {
     // If the response contains this value, the operation is successful
-    reply.keys.contains('img_b64')
+    reply['status'] == _successStatus
         ? showDialog(
             context: context,
             builder: (context) {
@@ -36,29 +45,28 @@ class ApiResponseHandler {
             backgroundColor: Colors.red,
             content:
                 Text('Impossibile individuare un volto in questa immagine.'),
-            duration: Duration(seconds: 1, microseconds: 800)));
+            duration: Duration(seconds: 2, microseconds: 500)));
   }
 
   /// This method is used to spcify what action perform, if identify service
   /// is selected, according to the the reply sent from the web API
-  void _handleIndentifyRequestResponse() {
-    Color snackBarColor;
-    String snackBarMessage;
+  String _handleIndentifyRequestResponse() {
+    String message;
 
-    if (reply['message'].toString().contains('Success!')) {
-      snackBarColor = Colors.green;
-      snackBarMessage = reply['founded_ids'].toString();
+    if (reply['status'] == _successStatus) {
+      message = 'Identità trovate:\n ';
+
+      List foundedIds = reply['founded_ids'];
+      log(foundedIds.length);
+
+      for (String id in foundedIds) {
+        message += '• $id\n';
+      }
     } else {
-      snackBarColor = Colors.red;
-      snackBarMessage = 'Impossibile individuare volti in questa immagine';
+      message = 'idFail';
     }
 
-    // TODO: ask to register not represented users
-
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        backgroundColor: snackBarColor,
-        content: Text(snackBarMessage),
-        duration: const Duration(seconds: 3, microseconds: 500)));
+    return message;
   }
 
   /// This method is used to spcify what action perform, if verify service
@@ -68,7 +76,7 @@ class ApiResponseHandler {
     String snackBarMessage;
 
     // Deterimines scaffold properties
-    if (reply.containsValue('True')) {
+    if (reply['status'] == _successStatus) {
       snackBarColor = Colors.green;
       snackBarMessage = 'Identità confermata';
     } else {
@@ -79,7 +87,7 @@ class ApiResponseHandler {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         backgroundColor: snackBarColor,
         content: Text(snackBarMessage),
-        duration: const Duration(seconds: 1, microseconds: 800)));
+        duration: const Duration(seconds: 2, microseconds: 500)));
   }
 
   /// This method is used to spcify what action perform, if verify service
@@ -88,7 +96,7 @@ class ApiResponseHandler {
     Color snackBarColor;
     String snackBarMessage;
 
-    if (reply['message'].toString().contains('Representation generated')) {
+    if (reply['status'] == _successStatus) {
       snackBarColor = Colors.green;
       snackBarMessage = 'Identità registrata';
     } else {
@@ -99,6 +107,6 @@ class ApiResponseHandler {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
         backgroundColor: snackBarColor,
         content: Text(snackBarMessage),
-        duration: const Duration(seconds: 1, microseconds: 800)));
+        duration: const Duration(seconds: 2, microseconds: 500)));
   }
 }

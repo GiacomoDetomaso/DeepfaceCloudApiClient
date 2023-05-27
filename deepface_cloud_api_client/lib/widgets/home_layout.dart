@@ -16,11 +16,17 @@ class HomeWidget extends StatefulWidget {
   // selected from the ChipGroup
   final Function(int, String) onChipSelectedCallback;
 
+  // Indicates if the circluar progress bar need to be showing
   final bool isCircularProgressIndicatorShowing;
+
+  // A text to display if some operations from the parent
+  // widgets are successful
+  final String successMessage;
 
   const HomeWidget(
       {super.key,
       required this.isCircularProgressIndicatorShowing,
+      required this.successMessage,
       required this.imagePickedCallback,
       required this.onChipSelectedCallback});
 
@@ -109,10 +115,15 @@ class _HomeWidgetState extends State<HomeWidget> {
                     image: DecorationImage(
                         alignment: Alignment.center,
                         image: MemoryImage(_imageBytes!),
-                        fit: BoxFit.fill),
+                        fit: BoxFit.cover),
                     shape: BoxShape.rectangle),
               ),
             ),
+          if (widget.successMessage.isNotEmpty)
+            Container(
+                padding: const EdgeInsets.only(top: 20),
+                alignment: Alignment.center,
+                child: Text(widget.successMessage)),
 
           // This section contains an OutlinedButton that will perform
           // the pick action of the ImagePicker. The image will be
@@ -130,10 +141,12 @@ class _HomeWidgetState extends State<HomeWidget> {
                 // Retrieve the image bytes from the file
                 Uint8List? imageBytes = await imageFile?.readAsBytes();
 
-                Uint8List imageBytesCompressed = await compressUint8List(imageBytes!);
+                Uint8List imageBytesCompressed =
+                    await compressUint8List(imageBytes!);
 
                 // Encode image bytes using the dart:convert module's base64Encode
-                String encodedBytes = base64.encode(imageBytesCompressed.toList());
+                String encodedBytes =
+                    base64.encode(imageBytesCompressed.toList());
                 // Send the encoded String to the parent via callback
                 widget.imagePickedCallback(encodedBytes);
                 // Change the state of the widget according to the picked image
