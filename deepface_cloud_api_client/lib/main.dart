@@ -1,12 +1,12 @@
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:developer';
-import 'dart:io';
 
 import 'package:deepface_cloud_api_client/utils/api_response_handler.dart';
 import 'package:deepface_cloud_api_client/widgets/dialog_form_generator.dart';
 import 'package:flutter/material.dart';
 import 'widgets/home_layout.dart';
+import 'package:http/http.dart' as http;
 
 void main() {
   runApp(const MyApp());
@@ -32,9 +32,9 @@ class MyApp extends StatelessWidget {
 class MyHomePage extends StatefulWidget {
   MyHomePage({super.key, required this.title});
 
-  final Map<String, String> jsonRequest = {};
+  final Map<String, dynamic> requestMap = {};
   final String title;
-  final String url = 'https://deepfacecloudapiunibatesi.azurewebsites.net/';
+  final String url = 'deepfacecloudapiunibatesi.azurewebsites.net';
 
   // Setting up constant values that correspons to the selected chip
   static const detectId = 0;
@@ -47,7 +47,8 @@ class MyHomePage extends StatefulWidget {
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  String requestURL = 'https://deepfacecloudapiunibatesi.azurewebsites.net/';
+  String requestURL = 'deepfacecloudapiunibatesi.azurewebsites.net';
+  String serviceName = '';
 
   // The state of the widget
   int _selectedIndex = 0;
@@ -108,10 +109,9 @@ class _MyHomePageState extends State<MyHomePage> {
   }
 
   /// Used to build the json request
-  void _buildJsonRequestMap(
-      List<String> keys, List<String> values, bool clean) {
-    if (clean && widget.jsonRequest.isNotEmpty) {
-      widget.jsonRequest.clear();
+  void _buildRequestMap(List<String> keys, List<String> values, bool clean) {
+    if (clean && widget.requestMap.isNotEmpty) {
+      widget.requestMap.clear();
     }
 
     if (keys.length != values.length) {
@@ -119,70 +119,105 @@ class _MyHomePageState extends State<MyHomePage> {
     }
 
     for (int i = 0; i < keys.length; i++) {
-      widget.jsonRequest.putIfAbsent(keys[i], () => values[i]);
+      widget.requestMap.putIfAbsent(keys[i], () => values[i]);
     }
   }
 
+  Future<http.MultipartRequest> _buildRequest(
+      Uri uri, String method, String path) async {
+    var keys = widget.requestMap.keys;
+    var values = widget.requestMap.values;
+    var request = http.MultipartRequest(method, uri);
+
+    for (int i = 0; i < keys.length; i++) {
+      request.fields[keys.elementAt(i)] = values.elementAt(i);
+    }
+
+    request.files.add(await http.MultipartFile.fromPath('img', path));
+
+    return request;
+  }
+
+  Future<Map<int, String>> sendMultipartRequest(
+      String url, String method) async {
+    var uri = Uri.http(url, serviceName);
+
+    log("Dim: ${widget.requestMap.length}");
+    log(widget.requestMap.values.toString());
+
+    String filePath = widget.requestMap['img'];
+    log(filePath);
+    http.MultipartRequest request = await _buildRequest(uri, method, filePath);
+
+    http.StreamedResponse streamedResponse = await request.send();
+    log("${streamedResponse.statusCode}");
+
+    String response;
+
+    // Determines response value
+    streamedResponse.statusCode != 200
+        ? response = ''
+        : response = await streamedResponse.stream.bytesToString();
+
+    Map<int, String> responseMap = {streamedResponse.statusCode: response};
+
+    return responseMap;
+  }
+
   /// This mthod is used to handle the api request to REST api
-  Future<void> sendApiRequest(String url, Map jsonMap) async {
+  Future<void> menageApiRequest(String url, Map jsonMap, String method) async {
     _updateRequestRunning(true); // Change the state
 
-    log("Request started at url: $url");
+    log("Request started at url: $url/$serviceName");
+    Map<int, String> replyMap = await sendMultipartRequest(url, method);
 
-    HttpClient httpClient = HttpClient();
-    HttpClientRequest request = await httpClient.postUrl(Uri.parse(url));
-    request.headers.set('content-type', 'application/json');
-    request.add(utf8.encode(json.encode(jsonMap)));
-    HttpClientResponse response = await request.close();
+    if (replyMap.containsKey(200)) {
+      Map jsonReply = jsonDecode(replyMap.remove(200)!);
+      log(jsonReply.toString());
 
-    String reply = await response.transform(utf8.decoder).join();
-    httpClient.close();
+      if (context.mounted) {
+        _updateRequestRunning(false);
+        var responseHandler = ApiResponseHandler(jsonReply, context);
+        String message = responseHandler.handleApiResponse(serviceName);
 
-    Map jsonReply = jsonDecode(reply);
-    log(reply);
-
-    if (context.mounted) {
-      _updateRequestRunning(false);
-      var responseHandler = ApiResponseHandler(jsonReply, context);
-      String message = responseHandler.handleApiResponse(url);
-
-      if (message == ApiResponseHandler.identifyFail) {
-        // If the identification fails let the user the possibility
-        // to register a representation of the input
-        showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-                  title: const Text(
-                    'Impossibile verificare idenità',
-                    style: TextStyle(fontSize: 20),
-                  ),
-                  content: const Text(
-                      "Impossibile identificare volti in questa immagine. Cliccare su 'Registra identità' "
-                      "se si vuole usare la stessa immagine per registrare il volto sconosciuto.\n"
-                      "L'operazione è possibile solo in presenza di un singolo volto."),
-                  actions: <TextButton>[
-                    TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: const Text('Chiudi')),
-                    TextButton(
-                        onPressed: () {
-                          //Navigator.pop(context);
-                          requestURL = '${widget.url}represent';
-                          Navigator.pop(context);
-                          _sendAction(MyHomePage.representId);
-                        },
-                        child: const Text('Registra identità'))
-                  ],
-                  actionsAlignment: MainAxisAlignment.end,
-                ));
-      } else if (message.isNotEmpty) {
-        // The only case in which the message is not empty is when the idenity
-        // in identify operations are found. The state of the widget is updated
-        // in order to display the success message.
-        _updateSuccessMessage(message);
+        if (message == ApiResponseHandler.identifyFail) {
+          // If the identification fails let the user the possibility
+          // to register a representation of the input
+          showDialog(
+              context: context,
+              builder: (context) => AlertDialog(
+                    title: const Text(
+                      'Impossibile verificare idenità',
+                      style: TextStyle(fontSize: 20),
+                    ),
+                    content: const Text(
+                        "Impossibile identificare volti in questa immagine. Cliccare su 'Registra identità' "
+                        "se si vuole usare la stessa immagine per registrare il volto sconosciuto.\n"
+                        "L'operazione è possibile solo in presenza di un singolo volto."),
+                    actions: <TextButton>[
+                      TextButton(
+                          onPressed: () => Navigator.pop(context),
+                          child: const Text('Chiudi')),
+                      TextButton(
+                          onPressed: () {
+                            //Navigator.pop(context);
+                            serviceName = 'represent';
+                            Navigator.pop(context);
+                            _sendAction(MyHomePage.representId);
+                          },
+                          child: const Text('Registra identità'))
+                    ],
+                    actionsAlignment: MainAxisAlignment.end,
+                  ));
+        } else if (message.isNotEmpty) {
+          // The only case in which the message is not empty is when the idenity
+          // in identify operations are found. The state of the widget is updated
+          // in order to display the success message.
+          _updateSuccessMessage(message);
+        }
+      } else {
+        log('Context not mounted');
       }
-    } else {
-      log('Context not mounted');
     }
   }
 
@@ -190,7 +225,15 @@ class _MyHomePageState extends State<MyHomePage> {
   void _sendAction(int injectedSelectedChip) {
     log("Chip index $injectedSelectedChip");
 
-    if (requestURL != widget.url) {
+    String method = 'POST';
+
+    if (serviceName == 'detect') {
+      method = 'GET';
+    }
+
+    if (serviceName.isNotEmpty) {
+      log(serviceName);
+
       if (injectedSelectedChip == MyHomePage.representId ||
           injectedSelectedChip == MyHomePage.verifyId) {
         _addEntriesOnChipBased(injectedSelectedChip);
@@ -203,14 +246,14 @@ class _MyHomePageState extends State<MyHomePage> {
                     List<String> keys = [];
 
                     if (id == MyHomePage.representId) {
-                      keys = ['username', 'info'];
+                      keys = ['identity', 'info'];
                     } else if (id == MyHomePage.verifyId) {
                       keys = ['identity'];
                     }
 
-                    _buildJsonRequestMap(keys, inputFields, false);
-                    log(widget.jsonRequest.toString());
-                    sendApiRequest(requestURL, widget.jsonRequest);
+                    _buildRequestMap(keys, inputFields, false);
+                    log(widget.requestMap.toString());
+                    menageApiRequest(requestURL, widget.requestMap, method);
 
                     // Let the user start a new request
                     _imagePicked = false;
@@ -220,7 +263,9 @@ class _MyHomePageState extends State<MyHomePage> {
                   },
                 ));
       } else {
-        sendApiRequest(requestURL, widget.jsonRequest);
+        menageApiRequest(requestURL, widget.requestMap, method);
+        // Let the user start a new request
+        _imagePicked = false;
       }
     } else {
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
@@ -251,59 +296,66 @@ class _MyHomePageState extends State<MyHomePage> {
         successMessage: _successMessage,
         isCircularProgressIndicatorShowing: _requestStatus,
         onChipSelectedCallback: (index, name) {
-          _selectedChip = index;
-
           // Add the nested services if detect is select
           if (index == MyHomePage.detectId) {
             name += "/faceboxes";
-          } else if (index == MyHomePage.identifyId) {
-            name = 'find';
           }
 
-          // Build the url that will be used to perform the request
-          requestURL = widget.url + name.toLowerCase();
+          _selectedChip = index;
+          _updateSuccessMessage('');
 
-          log("Selected Url: $requestURL");
+          // Build the url that will be used to perform the request
+          //requestURL = widget.url + name.toLowerCase();
+          serviceName = name.toLowerCase();
+
+          log("Selected service: $serviceName");
         },
 
         // The callback is used to process the base 64 encoded image
-        imagePickedCallback: (b64Image) {
+        imagePickedCallback: (filePath) {
           _imagePicked = true;
-          log("String b64 length: ${b64Image.length}");
-          log("Number of bytes b64 decoded image: ${base64.decode(b64Image).length}");
-          _buildJsonRequestMap(['img'], [b64Image], true);
+          log("Path: $filePath");
+
+          _buildRequestMap(['img'], [filePath], true);
         },
       )),
 
       // Setup the BottomNavigationBar and its items, defining also the
       // behavior when an item is tapped by the user.
-      bottomNavigationBar: BottomNavigationBar(
-          currentIndex: _selectedIndex,
-          onTap: _onItemTapped,
-          items: const <BottomNavigationBarItem>[
-            BottomNavigationBarItem(
-              icon: Icon(Icons.home),
-              label: 'Home',
-            ),
-            BottomNavigationBarItem(
-              icon: Icon(Icons.settings),
-              label: 'Impostazioni',
-            ),
-          ]),
+      bottomNavigationBar: Visibility(
+        visible: false,
+        child: BottomNavigationBar(
+            currentIndex: _selectedIndex,
+            onTap: _onItemTapped,
+            items: const <BottomNavigationBarItem>[
+              BottomNavigationBarItem(
+                icon: Icon(Icons.home),
+                label: 'Home',
+              ),
+              BottomNavigationBarItem(
+                icon: Icon(Icons.settings),
+                label: 'Impostazioni',
+              ),
+            ]),
+      ),
       floatingActionButton: FloatingActionButton(
           child: const Icon(Icons.send),
           // Define the onPressed by showing a dialog to send the request
           // to the web server
-          onPressed: () {
-            !_imagePicked // If the image is not picked show a snackbar
-                ? ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-                    backgroundColor: Colors.red,
-                    content: Text(
-                        'Impossibile inviare una richiesta senza prima aver selezionato un immagine.'),
-                    duration: Duration(seconds: 1, microseconds: 500),
-                  ))
-                : _sendAction(
-                    _selectedChip); // if the image is picked display the dialog
+          onPressed: () async {
+            if (!_imagePicked) // If the image is not picked show a snackbar
+            {
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+                backgroundColor: Colors.red,
+                content: Text(
+                    'Impossibile inviare una richiesta senza prima aver selezionato un immagine.'),
+                duration: Duration(seconds: 1, microseconds: 500),
+              ));
+            } else {
+              log('$_selectedChip');
+              _sendAction(_selectedChip);
+            }
+            // if the image is picked display the dialog
           }),
     );
   }

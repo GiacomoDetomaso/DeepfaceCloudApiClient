@@ -1,10 +1,12 @@
-import 'dart:convert';
 import 'dart:developer';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_image_compress/flutter_image_compress.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:path/path.dart' as p;
 
 class HomeWidget extends StatefulWidget {
   // This calback is used to handle the image picked from the gallery.
@@ -138,17 +140,25 @@ class _HomeWidgetState extends State<HomeWidget> {
                 final XFile? imageFile =
                     await ImagePicker().pickImage(source: ImageSource.gallery);
 
+                String baseImagePath = imageFile!.path;
+                String ext = p.extension(baseImagePath);
+
                 // Retrieve the image bytes from the file
-                Uint8List? imageBytes = await imageFile?.readAsBytes();
+                Uint8List? imageBytes = await imageFile.readAsBytes();
 
                 Uint8List imageBytesCompressed =
-                    await compressUint8List(imageBytes!);
+                    await compressUint8List(imageBytes);
 
-                // Encode image bytes using the dart:convert module's base64Encode
-                String encodedBytes =
-                    base64.encode(imageBytesCompressed.toList());
+                Directory localDir = await getApplicationDocumentsDirectory();
+                String localDirPath = localDir.path;
+                File f = File("$localDirPath/img$ext");
+                f.writeAsBytes(imageBytesCompressed);
+
+                int len = await f.length();
+                log("File dim: $len");
+
                 // Send the encoded String to the parent via callback
-                widget.imagePickedCallback(encodedBytes);
+                widget.imagePickedCallback(f.path);
                 // Change the state of the widget according to the picked image
                 setState(() {
                   _imageBytes = imageBytes;

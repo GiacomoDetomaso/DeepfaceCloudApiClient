@@ -12,17 +12,17 @@ class ApiResponseHandler {
 
   ApiResponseHandler(this.reply, this.context);
 
-  String handleApiResponse(String url) {
+  String handleApiResponse(String service) {
     String message = '';
 
     // Select the correct response handler
-    if (url.contains('detect')) {
+    if (service.contains('detect')) {
       _handleDetectRequestResponse();
-    } else if (url.contains('find')) {
+    } else if (service.contains('identify')) {
       message = _handleIndentifyRequestResponse();
-    } else if (url.contains('verify')) {
+    } else if (service.contains('verify')) {
       _handleVerifyRequestResponse();
-    } else if (url.contains('represent')) {
+    } else if (service.contains('represent')) {
       _handleRepresentRequestResponse();
     }
 
@@ -54,7 +54,7 @@ class ApiResponseHandler {
     String message;
 
     if (reply['status'] == _successStatus) {
-      message = 'Identità trovate:\n ';
+      message = 'Identità trovate:\n';
 
       List foundedIds = reply['founded_ids'];
       log(foundedIds.length);
@@ -72,16 +72,22 @@ class ApiResponseHandler {
   /// This method is used to spcify what action perform, if verify service
   /// is selected, according to the the reply sent from the web API
   void _handleVerifyRequestResponse() {
-    Color snackBarColor;
-    String snackBarMessage;
+    Color snackBarColor = Colors.green;
+    String snackBarMessage = '';
 
     // Deterimines scaffold properties
     if (reply['status'] == _successStatus) {
-      snackBarColor = Colors.green;
-      snackBarMessage = 'Identità confermata';
+      if (reply['message'] == 'True') {
+        snackBarColor = Colors.green;
+        snackBarMessage = 'Identità confermata';
+      } else if (reply['message'] == 'False') {
+        snackBarColor = Colors.red;
+        snackBarMessage = 'Identità NON confermata';
+      }
     } else {
       snackBarColor = Colors.red;
-      snackBarMessage = 'Identità NON confermata';
+      snackBarMessage =
+          'Errori nell\'invio della richiesta. Controllare che l\'immagine contenga volti';
     }
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
@@ -101,7 +107,7 @@ class ApiResponseHandler {
       snackBarMessage = 'Identità registrata';
     } else {
       snackBarColor = Colors.red;
-      snackBarMessage = 'Identità NON registrata: errori interni';
+      snackBarMessage = 'Identità NON registrata: volti multipli rilevati';
     }
 
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
